@@ -14,17 +14,18 @@
 package main
 
 import (
+	"crypto/tls"
 	"fmt"
 	"net/http"
 	_ "net/http/pprof"
 	"sort"
-	"crypto/tls"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/log"
 	"github.com/prometheus/common/version"
 	"github.com/prometheus/node_exporter/collector"
+	"github.com/prometheus/node_exporter/mtls"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -133,21 +134,21 @@ func (h *handler) innerHandler(filters ...string) (http.Handler, error) {
 
 type wrappedCertificate struct {
 	certificate *tls.Certificate
-	certPath	string
-	keyPath		string
+	certPath    string
+	keyPath     string
 }
 
-func (c *wrappedCertificate) getCertificate(clientHello *tls.ClientHelloInfo ) (*tls.Certificate, error){
+func (c *wrappedCertificate) getCertificate(clientHello *tls.ClientHelloInfo) (*tls.Certificate, error) {
 	log.Infoln("Client Hello Received")
 	if len(c.keyPath) <= 0 {
 		c.keyPath = c.certPath
 	}
 	c.loadCertificates(c.certPath, c.keyPath)
-	
+
 	return c.certificate, nil
 }
 
-func (c *wrappedCertificate) loadCertificates(certPath, keyPath string) error{
+func (c *wrappedCertificate) loadCertificates(certPath, keyPath string) error {
 	certAndKey, err := tls.LoadX509KeyPair(certPath, keyPath)
 	if err != nil {
 		return err
@@ -204,31 +205,20 @@ func main() {
 			</html>`))
 	})
 
-	//wrapped Certificate struct called,  pass in initial paths
-	wrappedCert := wrappedCertificate{}
-	wrappedCert.loadCertificates(*TLSCert, *TLSPrivateKey)
-	wrappedCert.certPath = *TLSCert
- 	wrappedCert.keyPath = *TLSPrivateKey
-	config := &tls.Config{
-		CipherSuites: []uint16{
-			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-			tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-		},
-		PreferServerCipherSuites: true,
-		GetCertificate:	wrappedCert.getCertificate, 
-	}	
-	
-	//tls config added to server
-	server := &http.Server{Addr: *listenAddress, TLSConfig: config, Handler: nil}
-	log.Infoln("Listening on", *listenAddress)
+	var server *mtls.TlsServer
 	if len(*TLSCert) > 0 {
-		
-		if err := server.ListenAndServeTLS("", ""); err != nil {
+
+		var err error
+		server, err = mtls.NewMtlsServer(*TLSCert, *TLSPrivateKey)
+		if err != nil {
 			log.Fatal(err)
 		}
+
 	} else {
-		if err := http.ListenAndServe(*listenAddress, nil); err != nil {
-			log.Fatal(err)
-		}
+
+		server = mtls.NewUnsecureServer()
+
 	}
+
+	log.Fatal(server.Listen(*listenAddress))
 }
