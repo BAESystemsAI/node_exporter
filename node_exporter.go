@@ -14,18 +14,18 @@
 package main
 
 import (
-	"crypto/tls"
 	"fmt"
 	"net/http"
 	_ "net/http/pprof"
 	"sort"
+
+	"github.com/jritchiebae/mtls-client-server/mtls"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/log"
 	"github.com/prometheus/common/version"
 	"github.com/prometheus/node_exporter/collector"
-	"github.com/prometheus/node_exporter/mtls"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -130,34 +130,6 @@ func (h *handler) innerHandler(filters ...string) (http.Handler, error) {
 	return handler, nil
 }
 
-//TLS Keypair reloading to be extracted to it's own package
-
-type wrappedCertificate struct {
-	certificate *tls.Certificate
-	certPath    string
-	keyPath     string
-}
-
-func (c *wrappedCertificate) getCertificate(clientHello *tls.ClientHelloInfo) (*tls.Certificate, error) {
-	log.Infoln("Client Hello Received")
-	if len(c.keyPath) <= 0 {
-		c.keyPath = c.certPath
-	}
-	c.loadCertificates(c.certPath, c.keyPath)
-
-	return c.certificate, nil
-}
-
-func (c *wrappedCertificate) loadCertificates(certPath, keyPath string) error {
-	certAndKey, err := tls.LoadX509KeyPair(certPath, keyPath)
-	if err != nil {
-		return err
-	}
-	log.Infoln("Loading Certs")
-	c.certificate = &certAndKey
-	return nil
-}
-
 func main() {
 	var (
 		listenAddress = kingpin.Flag(
@@ -205,20 +177,15 @@ func main() {
 			</html>`))
 	})
 
-	var server *mtls.TlsServer
+	var svr *mtls.TlsServer
 	if len(*TLSCert) > 0 {
-
-		var err error
-		server, err = mtls.NewMtlsServer(*TLSCert, *TLSPrivateKey)
-		if err != nil {
-			log.Fatal(err)
-		}
-
+		svr, _ = mtls.NewMtlsServer(*TLSCert, *TLSPrivateKey)
 	} else {
-
-		server = mtls.NewUnsecureServer()
-
+		svr = mtls.NewUnsecureServer()
 	}
 
-	log.Fatal(server.Listen(*listenAddress))
+	log.Infoln("Listening on", *listenAddress)
+	if err := svr.Listen(*listenAddress); err != nil {
+		log.Fatal(err)
+	}
 }
