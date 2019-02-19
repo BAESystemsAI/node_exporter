@@ -19,7 +19,7 @@ import (
 	_ "net/http/pprof"
 	"sort"
 
-	"github.com/jritchiebae/mtls-client-server/mtls"
+	"github.com/jritchiebae/mtls-client-server/mtlsServer"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/log"
@@ -180,15 +180,15 @@ func main() {
 			</html>`))
 	})
 
-	var svr *mtls.TlsServer
+	var svr *mtlsServer.TlsServer
 	if len(*TLSCert) > 0 {
 		if len(*TLSCACert) > 0 {
-			svr, _ = mtls.NewMtlsServer(*TLSCert, *TLSPrivateKey, *TLSCACert)
+			svr, _ = mtlsServer.NewMtlsServer(*TLSCert, *TLSPrivateKey, *TLSCACert)
 		} else {
-			svr, _ = mtls.NewTlsServer(*TLSCert, *TLSPrivateKey)
+			svr, _ = mtlsServer.NewTlsServer(*TLSCert, *TLSPrivateKey)
 		}
 	} else {
-		svr = mtls.NewUnsecureServer()
+		svr = mtlsServer.NewUnsecureServer()
 	}
 
 	log.Infoln("Listening on", *listenAddress)

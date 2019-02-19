@@ -11,7 +11,7 @@ require (
 	github.com/gogo/protobuf v1.1.1 // indirect
 	github.com/golang/protobuf v1.2.0 // indirect
 	github.com/google/go-cmp v0.2.0 // indirect
-	github.com/jritchiebae/mtls-client-server v0.0.0-20190219123310-3dd06c39a823
+	github.com/jritchiebae/mtls-client-server v0.0.0-20190219132242-b0ec5c786bc1
 	github.com/konsorten/go-windows-terminal-sequences v1.0.1 // indirect
 	github.com/lufia/iostat v0.0.0-20170605150913-9f7362b77ad3
 	github.com/mattn/go-xmlrpc v0.0.0-20180913190254-6e944673e4c0
