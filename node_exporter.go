@@ -20,7 +20,6 @@ import (
 	"sort"
 
 	"github.com/jritchiebae/mtls-client-server/mtls"
-
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/log"
@@ -156,6 +155,10 @@ func main() {
 			"web.tls-private-key",
 			"Path to PEM file that contains the private key (if not contained in web.tls-cert file).",
 		).Default("").String()
+		TLSCACert = kingpin.Flag(
+			"web.tls-ca-cert",
+			"Path to PEM file that contains the root CA certificate).",
+		).Default("").String()
 	)
 
 	log.AddFlags(kingpin.CommandLine)
@@ -179,7 +182,11 @@ func main() {
 
 	var svr *mtls.TlsServer
 	if len(*TLSCert) > 0 {
-		svr, _ = mtls.NewMtlsServer(*TLSCert, *TLSPrivateKey)
+		if len(*TLSCACert) > 0 {
+			svr, _ = mtls.NewMtlsServer(*TLSCert, *TLSPrivateKey, *TLSCACert)
+		} else {
+			svr, _ = mtls.NewTlsServer(*TLSCert, *TLSPrivateKey)
+		}
 	} else {
 		svr = mtls.NewUnsecureServer()
 	}
