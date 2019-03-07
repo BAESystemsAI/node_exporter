@@ -1,42 +1,43 @@
-# HTTPS Package for prometheus
-
 The `https` directory contains files and a template config for the implementation of tls.
-When running a server with tls use the flag `--web.tls-config`
+When running a server with tls use the flag --web.tls-config=" /path to config/.yml "
 Where the path is from where the exporter was run.
 
-e.g. `./node_exporter --web.tls-config="https/tls-config.yml"`
+i.e. ./node_exporter --web.tls-config="https/tls-config"
 If the config is kept within the https directory 
 
-The config file should is written in YAML format.
-The layout is outlined below, with optional parameters in brackets.
+The layout of the config file should be as below:
 
-For more detail on the clientAuth option: [ClientAuthType](https://golang.org/pkg/crypto/tls/#ClientAuthType)
-
-### TLS Config Layout
-
-```
 #TLS CONFIG YAML
-  # Main config options for tls
-
-tlsConfig :
-
   # Paths to Cert File & Key file from base directory
   # Both required for valid tls
   # Paths set as string values
-  # These are reloaded on initial connection 
-  tlsCertPath : <filename>
-  tlsKeyPath : <filename>
+tlsCertPath : ""
+tlsKeyPath : ""
 
-  # ClientAuth declares the policy the server will follow for client authentication
+  # Main config options for tls
+  # Defaults for all options are nil values
+tlsConfig :
+
+  # Root CA's should be a string path to the set of root certificate authorities
+  # if nil it will use the host's root CA set
+  rootCAs : ~
+
+  # Server Name used to verify hostname on returned certs
+  # unless Insecure Skip Verify is true
+  serverName : ~
+
+  # Client auth declares the policy the server will follow for client auth
   # Accepts the following string values and maps to ClientAuth Policies
-  # NoClientCert                
-  # RequestClientCert           
-  # RequireAnyClientCert        
-  # VerifyClientCertIfGiven     
-  # RequireAndVerifyClientCert  
-  [ clientAuth : <string> | default = "NoClientCert" ]
+  # NoClientCert                -
+  # RequestClientCert           -
+  # RequireAnyClientCert        -
+  # VerifyClientCertIfGiven     -
+  # RequireAndVerifyClientCert  -
+  clientAuth : ~
 
-  # ClientCa's accepts a string path to the set of CA's
-  [ clientCAs : <filename> ]
-  
-```
+  # Client Ca's accepts a string path to the set of CA's
+  clientCAs : ~
+
+  # Controls whether a client verifies the servers cert chain and hostname
+  # Boolean value - TLS insecure if true so should only be set as true for testing
+  insecureSkipVerify : ~
