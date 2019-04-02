@@ -4,6 +4,7 @@ package https
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"io/ioutil"
 	"net/http"
 
@@ -37,7 +38,7 @@ func GetTLSConfig(configPath string) *tls.Config {
 	return tlsc
 }
 
-func loadConfigFromYaml(fileName string) (*Config, error) {
+func loadConfigFromYaml(fileName string) (*TLSConfig, error) {
 	content, err := ioutil.ReadFile(fileName)
 	if err != nil {
 		return nil, err
@@ -47,47 +48,44 @@ func loadConfigFromYaml(fileName string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	return c, nil
+	return &c.TLSConfig, nil
 }
 
-func LoadTLSConfig(c *Config) (*tls.Config, error) {
+func configToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 	cfg := &tls.Config{}
-	if len(c.TLSCertPath) > 0 {
-		cfg.GetCertificate = func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+	if len(c.TLSCertPath) > 0 && len(c.TLSKeyPath) > 0 {
+
+		loadCert := func() (*tls.Certificate, error) {
 			cert, err := tls.LoadX509KeyPair(c.TLSCertPath, c.TLSKeyPath)
 			if err != nil {
 				return nil, err
 			}
 			return &cert, nil
 		}
-		cfg.BuildNameToCertificate()
-	}
-	if len(c.TLSConfig.ServerName) > 0 {
-		cfg.ServerName = c.TLSConfig.ServerName
-	}
-	if c.TLSConfig.InsecureSkipVerify {
-		cfg.InsecureSkipVerify = true
-	}
-	if len(c.TLSConfig.RootCAs) > 0 {
-		rootCertPool := x509.NewCertPool()
-		rootCAFile, err := ioutil.ReadFile(c.TLSConfig.RootCAs)
-		if err != nil {
-			return cfg, err
+
+		//Errors if either the certpath or keypath is invalid
+		if _, err := loadCert(); err != nil {
+			return nil, err
 		}
-		rootCertPool.AppendCertsFromPEM(rootCAFile)
-		cfg.RootCAs = rootCertPool
+
+		cfg.GetCertificate = func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+			return loadCert()
+		}
 	}
-	if len(c.TLSConfig.ClientCAs) > 0 {
+
+	if len(c.ClientCAs) > 0 {
 		clientCAPool := x509.NewCertPool()
-		clientCAFile, err := ioutil.ReadFile(c.TLSConfig.ClientCAs)
+		clientCAFile, err := ioutil.ReadFile(c.ClientCAs)
 		if err != nil {
 			return cfg, err
 		}
 		clientCAPool.AppendCertsFromPEM(clientCAFile)
 		cfg.ClientCAs = clientCAPool
 	}
-	if len(c.TLSConfig.ClientAuth) > 0 {
-		switch s := (c.TLSConfig.ClientAuth); s {
+	if len(c.ClientAuth) > 0 {
+		switch s := (c.ClientAuth); s {
+		case "NoClientCert":
+			cfg.ClientAuth = tls.NoClientCert
 		case "RequestClientCert":
 			cfg.ClientAuth = tls.RequestClientCert
 		case "RequireClientCert":
@@ -97,7 +95,7 @@ func LoadTLSConfig(c *Config) (*tls.Config, error) {
 		case "RequireAndVerifyClientCert":
 			cfg.ClientAuth = tls.RequireAndVerifyClientCert
 		default:
-			cfg.ClientAuth = tls.NoClientCert
+			return nil, errors.New("Invalid string provided to ClientAuth: " + s)
 		}
 	}
 	return cfg, nil
