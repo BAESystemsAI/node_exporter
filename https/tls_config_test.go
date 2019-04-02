@@ -93,7 +93,7 @@ func TestListen(t *testing.T) {
 			ExpectedResult: false,
 		},
 		{
-			Name:           `nil Server and tls client`,
+			Name:           `nil Server and TLS client`,
 			Server:         nil,
 			YAMLConfigPath: "",
 			Client:         TLSClient,
@@ -109,7 +109,7 @@ func TestListen(t *testing.T) {
 			ExpectedResult: false,
 		},
 		{
-			Name:           `empty config.yml and tls client`,
+			Name:           `empty config.yml and TLS client`,
 			Server:         &http.Server{Addr: port},
 			YAMLConfigPath: "testdata/tls_config_empty.yml",
 			Client:         TLSClient,
@@ -117,7 +117,7 @@ func TestListen(t *testing.T) {
 			ExpectedResult: false,
 		},
 		{
-			Name:           `valid tls config yml and tls client`,
+			Name:           `valid tls config yml and TLS client`,
 			Server:         &http.Server{Addr: port},
 			YAMLConfigPath: "testdata/tls_config_noAuth.good.yml",
 			Client:         TLSClient,
@@ -125,7 +125,7 @@ func TestListen(t *testing.T) {
 			ExpectedResult: true,
 		},
 		{
-			Name:           `invalid tls config yml (cert path invalid) and tls client`,
+			Name:           `invalid tls config yml (cert path invalid) and TLS client`,
 			Server:         &http.Server{Addr: port},
 			YAMLConfigPath: "testdata/tls_config_noAuth_certPath_invalid.bad.yml",
 			Client:         TLSClient,
@@ -133,7 +133,7 @@ func TestListen(t *testing.T) {
 			ExpectedResult: false,
 		},
 		{
-			Name:           `invalid tls config yml (key path invalid) and tls client`,
+			Name:           `invalid tls config yml (key path invalid) and TLS client`,
 			Server:         &http.Server{Addr: port},
 			YAMLConfigPath: "testdata/tls_config_noAuth_keyPath_invalid.bad.yml",
 			Client:         TLSClient,
@@ -141,7 +141,7 @@ func TestListen(t *testing.T) {
 			ExpectedResult: false,
 		},
 		{
-			Name:           `invalid tls config yml (cert path and key path invalid) and tls client`,
+			Name:           `invalid tls config yml (cert path and key path invalid) and TLS client`,
 			Server:         &http.Server{Addr: port},
 			YAMLConfigPath: "testdata/tls_config_noAuth_certPath_keyPath_invalid.bad.yml",
 			Client:         TLSClient,
@@ -149,7 +149,7 @@ func TestListen(t *testing.T) {
 			ExpectedResult: false,
 		},
 		{
-			Name:           `invalid tls config yml (cert path empty) and tls client`,
+			Name:           `invalid tls config yml (cert path empty) and TLS client`,
 			Server:         &http.Server{Addr: port},
 			YAMLConfigPath: "testdata/tls_config_noAuth_certPath_empty.bad.yml",
 			Client:         TLSClient,
@@ -157,7 +157,7 @@ func TestListen(t *testing.T) {
 			ExpectedResult: false,
 		},
 		{
-			Name:           `invalid tls config yml (key path empty) and tls client`,
+			Name:           `invalid tls config yml (key path empty) and TLS client`,
 			Server:         &http.Server{Addr: port},
 			YAMLConfigPath: "testdata/tls_config_noAuth_keyPath_empty.bad.yml",
 			Client:         TLSClient,
@@ -165,7 +165,7 @@ func TestListen(t *testing.T) {
 			ExpectedResult: false,
 		},
 		{
-			Name:           `invalid tls config yml (cert path and key path empty) and tls client`,
+			Name:           `invalid tls config yml (cert path and key path empty) and TLS client`,
 			Server:         &http.Server{Addr: port},
 			YAMLConfigPath: "testdata/tls_config_noAuth_certPath_keyPath_empty.bad.yml",
 			Client:         TLSClient,
@@ -189,7 +189,7 @@ func TestListen(t *testing.T) {
 			ExpectedResult: false,
 		},
 		{
-			Name:           `invalid tls config yml (invalid structure) and tls client`,
+			Name:           `invalid tls config yml (invalid structure) and TLS client`,
 			Server:         &http.Server{Addr: port},
 			YAMLConfigPath: "testdata/tls_config_junk.yml",
 			Client:         TLSClient,
@@ -205,7 +205,7 @@ func TestListen(t *testing.T) {
 			ExpectedResult: false,
 		},
 		{
-			Name:           `bad config yml path and tls client`,
+			Name:           `bad config yml path and TLS client`,
 			Server:         &http.Server{Addr: port},
 			YAMLConfigPath: "testdata/file_does_not_exist",
 			Client:         TLSClient,
@@ -221,7 +221,7 @@ func TestListen(t *testing.T) {
 			ExpectedResult: false,
 		},
 		{
-			Name:           `bad config yml (invalid ClientAuth) and tls client`,
+			Name:           `bad config yml (invalid ClientAuth) and TLS client`,
 			Server:         &http.Server{Addr: port},
 			YAMLConfigPath: "testdata/tls_config_noAuth.bad.yml",
 			Client:         TLSClient,
@@ -237,7 +237,7 @@ func TestListen(t *testing.T) {
 			ExpectedResult: false,
 		},
 		{
-			Name:           `bad config yml (invalid ClientCAs filepath) and tls client`,
+			Name:           `bad config yml (invalid ClientCAs filepath) and TLS client`,
 			Server:         &http.Server{Addr: port},
 			YAMLConfigPath: "testdata/tls_config_auth_clientCAs_invalid.bad.yml",
 			Client:         TLSClient,
@@ -253,7 +253,7 @@ func TestListen(t *testing.T) {
 			ExpectedResult: false,
 		},
 		{
-			Name:           `bad config yml (ClientCAs not provided) and tls client`,
+			Name:           `bad config yml (ClientCAs not provided) and TLS client`
 			Server:         &http.Server{Addr: port},
 			YAMLConfigPath: "testdata/tls_config_auth_clientCAs_missing.bad.yml",
 			Client:         TLSClient,
@@ -307,7 +307,11 @@ func runTest(test *TestInputs) (passed bool) {
 
 	// If goroutines block, return false
 	go func() {
+<<<<<<< HEAD
 		time.Sleep(5 * time.Second)
+=======
+		time.Sleep(1 * time.Second)
+>>>>>>> ee14eace3d2feefeeeaad641fdc4b48193156880
 		connected(false, "test timed out")
 	}()
 
@@ -321,7 +325,11 @@ func runTest(test *TestInputs) (passed bool) {
 
 	// Try to connect with provided nonTLSClient and URL
 	go func() {
+<<<<<<< HEAD
 		time.Sleep(1 * time.Second)
+=======
+		time.Sleep(100 * time.Millisecond)
+>>>>>>> ee14eace3d2feefeeeaad641fdc4b48193156880
 		defer func() {
 			recover()
 		}()

@@ -25,10 +25,10 @@ import (
 )
 
 type Config struct {
-	TLSConfig TLSStruct `yaml:"tlsConfig"`
+	TLSConfig TLSConfig `yaml:"tlsConfig"`
 }
 
-type TLSStruct struct {
+type TLSConfig struct {
 	TLSCertPath string `yaml:"tlsCertPath"`
 	TLSKeyPath  string `yaml:"tlsKeyPath"`
 	ClientAuth  string `yaml:"clientAuth"`
