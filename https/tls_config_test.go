@@ -28,6 +28,16 @@ import (
 
 var (
 	port = ":9100"
+
+	ErrorMap = map[string]*regexp.Regexp{
+		"HTTP Response to HTTPS": regexp.MustCompile(`server gave HTTP response to HTTPS client`),
+		"Server Panic":           regexp.MustCompile(`Panic starting server`),
+		"No such file":           regexp.MustCompile(`no such file`),
+		"YAML error":             regexp.MustCompile(`yaml`),
+		"Invalid ClientAuth":     regexp.MustCompile(`ClientAuth`),
+		"TLS handshake":          regexp.MustCompile(`tls`),
+		"Malformed response":     regexp.MustCompile(`malformed HTTP`),
+	}
 )
 
 type TestInputs struct {
@@ -39,18 +49,7 @@ type TestInputs struct {
 	UseTLSClient   bool
 }
 
-func TestListen(t *testing.T) {
-
-	ErrorMap := map[string]*regexp.Regexp{
-		"HTTP Response to HTTPS": regexp.MustCompile(`server gave HTTP response to HTTPS client`),
-		"Server Panic":           regexp.MustCompile(`Panic starting server`),
-		"No such file":           regexp.MustCompile(`no such file`),
-		"YAML error":             regexp.MustCompile(`yaml`),
-		"Invalid ClientAuth":     regexp.MustCompile(`ClientAuth`),
-		"TLS handshake":          regexp.MustCompile(`tls`),
-		"Malformed response":     regexp.MustCompile(`malformed HTTP`),
-	}
-
+func TestYAMLFiles(t *testing.T) {
 	testTables := []*TestInputs{
 		{
 			Name:           `path to config yml invalid`,
@@ -107,17 +106,18 @@ func TestListen(t *testing.T) {
 			YAMLConfigPath: "testdata/tls_config_auth_clientCAs_invalid.bad.yml",
 			ExpectedError:  ErrorMap["No such file"],
 		},
+	}
+	for _, testInputs := range testTables {
+		t.Run(testInputs.Name, testInputs.Test)
+	}
+}
+
+func TestServerBehaviour(t *testing.T) {
+	testTables := []*TestInputs{
 		{
 			Name:           `nil Server and default client`,
 			UseNilServer:   true,
 			YAMLConfigPath: "",
-			ExpectedError:  ErrorMap["Server Panic"],
-		},
-		{
-			Name:           `nil Server and TLS client`,
-			UseNilServer:   true,
-			YAMLConfigPath: "",
-			UseTLSClient:   true,
 			ExpectedError:  ErrorMap["Server Panic"],
 		},
 		{
