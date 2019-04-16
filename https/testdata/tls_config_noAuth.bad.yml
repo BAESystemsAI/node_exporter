@@ -1,4 +1,3 @@
-#TLS Config YAML
 tlsConfig :
 
   tlsCertPath : "testdata/server.crt"

@@ -1,3 +1,16 @@
+// Copyright 2019 The Prometheus Authors
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package https
 
 import (
@@ -7,376 +20,228 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"os"
 	"regexp"
 	"sync"
 	"testing"
 	"time"
 )
 
+var (
+	port = ":9100"
+)
+
 type TestInputs struct {
 	Name           string
 	Server         func() *http.Server
-	httpServer     *http.Server
+	UseNilServer   bool
 	YAMLConfigPath string
-	httpClient     *http.Client
-	Client         func() *http.Client
-	ConnectionURL  string
-	ExpectedResult bool
 	ExpectedError  *regexp.Regexp
+	UseTLSClient   bool
 }
 
 func TestListen(t *testing.T) {
-	logging := testing.Verbose()
 
-	port := ":9100"
-
-	httpPath := "http://localhost" + port
-	httpsPath := "https://localhost" + port
-
-	DefaultClient := func() *http.Client {
-		return http.DefaultClient
+	ErrorMap := map[string]*regexp.Regexp{
+		"HTTP Response to HTTPS": regexp.MustCompile(`server gave HTTP response to HTTPS client`),
+		"Server Panic":           regexp.MustCompile(`Panic starting server`),
+		"No such file":           regexp.MustCompile(`no such file`),
+		"YAML error":             regexp.MustCompile(`yaml`),
+		"Invalid ClientAuth":     regexp.MustCompile(`ClientAuth`),
+		"TLS handshake":          regexp.MustCompile(`tls`),
+		"Malformed response":     regexp.MustCompile(`malformed HTTP`),
 	}
 
-	TLSClient := func() *http.Client {
-		cert, err := ioutil.ReadFile("testdata/tls-ca-chain.pem")
-		if err != nil {
-			log.Fatal("Unable to start TLS client. Check cert path")
-		}
-		return &http.Client{
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{
-					RootCAs: func() *x509.CertPool {
-						caCertPool := x509.NewCertPool()
-						caCertPool.AppendCertsFromPEM(cert)
-						return caCertPool
-					}(),
-				},
-			},
-		}
+	testTables := []*TestInputs{
+		{
+			Name:           `path to config yml invalid`,
+			YAMLConfigPath: "somefile",
+			ExpectedError:  ErrorMap["No such file"],
+		},
+		{
+			Name:           `empty config yml`,
+			YAMLConfigPath: "testdata/tls_config_empty.yml",
+			ExpectedError:  ErrorMap["No such file"],
+		},
+		{
+			Name:           `invalid config yml (invalid structure)`,
+			YAMLConfigPath: "testdata/tls_config_junk.yml",
+			ExpectedError:  ErrorMap["YAML error"],
+		},
+		{
+			Name:           `invalid config yml (cert path empty)`,
+			YAMLConfigPath: "testdata/tls_config_noAuth_certPath_empty.bad.yml",
+			ExpectedError:  ErrorMap["No such file"],
+		},
+		{
+			Name:           `invalid config yml (key path empty)`,
+			YAMLConfigPath: "testdata/tls_config_noAuth_keyPath_empty.bad.yml",
+			ExpectedError:  ErrorMap["No such file"],
+		},
+		{
+			Name:           `invalid config yml (cert path and key path empty)`,
+			YAMLConfigPath: "testdata/tls_config_noAuth_certPath_keyPath_empty.bad.yml",
+			ExpectedError:  ErrorMap["No such file"],
+		},
+		{
+			Name:           `invalid config yml (cert path invalid)`,
+			YAMLConfigPath: "testdata/tls_config_noAuth_certPath_invalid.bad.yml",
+			ExpectedError:  ErrorMap["No such file"],
+		},
+		{
+			Name:           `invalid config yml (key path invalid)`,
+			YAMLConfigPath: "testdata/tls_config_noAuth_keyPath_invalid.bad.yml",
+			ExpectedError:  ErrorMap["No such file"],
+		},
+		{
+			Name:           `invalid config yml (cert path and key path invalid)`,
+			YAMLConfigPath: "testdata/tls_config_noAuth_certPath_keyPath_invalid.bad.yml",
+			ExpectedError:  ErrorMap["No such file"],
+		},
+		{
+			Name:           `invalid config yml (invalid ClientAuth)`,
+			YAMLConfigPath: "testdata/tls_config_noAuth.bad.yml",
+			ExpectedError:  ErrorMap["Invalid ClientAuth"],
+		},
+		{
+			Name:           `invalid config yml (invalid ClientCAs filepath)`,
+			YAMLConfigPath: "testdata/tls_config_auth_clientCAs_invalid.bad.yml",
+			ExpectedError:  ErrorMap["No such file"],
+		},
+		{
+			Name:           `nil Server and default client`,
+			UseNilServer:   true,
+			YAMLConfigPath: "",
+			ExpectedError:  ErrorMap["Server Panic"],
+		},
+		{
+			Name:           `nil Server and TLS client`,
+			UseNilServer:   true,
+			YAMLConfigPath: "",
+			UseTLSClient:   true,
+			ExpectedError:  ErrorMap["Server Panic"],
+		},
+		{
+			Name:           `empty string YAMLConfigPath and default client`,
+			YAMLConfigPath: "",
+			ExpectedError:  nil,
+		},
+		{
+			Name:           `empty string YAMLConfigPath and TLS client`,
+			YAMLConfigPath: "",
+			UseTLSClient:   true,
+			ExpectedError:  ErrorMap["HTTP Response to HTTPS"],
+		},
+		{
+			Name:           `valid tls config yml and default client`,
+			YAMLConfigPath: "testdata/tls_config_noAuth.good.yml",
+			ExpectedError:  ErrorMap["Malformed response"],
+		},
+		{
+			Name:           `valid tls config yml and tls client`,
+			YAMLConfigPath: "testdata/tls_config_noAuth.good.yml",
+			UseTLSClient:   true,
+			ExpectedError:  nil,
+		},
 	}
+	for _, testInputs := range testTables {
+		t.Run(testInputs.Name, testInputs.Test)
+	}
+}
 
-	BaseServer := func() *http.Server {
-		return &http.Server{
+func (test *TestInputs) Test(t *testing.T) {
+	errorChannel := make(chan error, 1)
+	var once sync.Once
+	recordConnectionError := func(err error) {
+		once.Do(func() {
+			errorChannel <- err
+		})
+	}
+	defer func() {
+		if recover() != nil {
+			recordConnectionError(errors.New("Panic in test function"))
+		}
+	}()
+
+	var server *http.Server
+	if test.UseNilServer {
+		server = nil
+	} else {
+		server = &http.Server{
 			Addr: port,
 			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Write([]byte("Hello World!"))
 			}),
 		}
+		defer func() {
+			server.Close()
+		}()
 	}
-
-	ErrorMap := map[string]*regexp.Regexp{
-		"HTTP Response to HTTPS Client": regexp.MustCompile(`server gave HTTP response to HTTPS client`),
-		"Server Panic":                  regexp.MustCompile(`Panic starting server`),
-		"No such file":                  regexp.MustCompile(`no such file`),
-		"YAML error":                    regexp.MustCompile(`yaml`),
-		"Invalid ClientAuth":            regexp.MustCompile(`ClientAuth`),
-		"TLS handshake":                 regexp.MustCompile(`tls`),
-		"Malformed response":            regexp.MustCompile(`malformed HTTP`),
-	}
-
-	testTables := []*TestInputs{
-		{
-			Name:           `empty string YAMLConfigPath and default client`,
-			Server:         BaseServer,
-			YAMLConfigPath: "",
-			Client:         DefaultClient,
-			ConnectionURL:  httpPath,
-			ExpectedResult: true,
-		},
-		{
-			Name:           `empty string YAMLConfigPath and TLS client`,
-			Server:         BaseServer,
-			YAMLConfigPath: "",
-			Client:         TLSClient,
-			ConnectionURL:  httpsPath,
-			ExpectedResult: false,
-			ExpectedError:  ErrorMap["HTTP Response to HTTPS Client"],
-		},
-		{
-			Name:           `nil Server and default client`,
-			Server:         nil,
-			YAMLConfigPath: "",
-			Client:         DefaultClient,
-			ConnectionURL:  httpPath,
-			ExpectedResult: false,
-			ExpectedError:  ErrorMap["Server Panic"],
-		},
-		{
-			Name:           `nil Server and TLS client`,
-			Server:         nil,
-			YAMLConfigPath: "",
-			Client:         TLSClient,
-			ConnectionURL:  httpsPath,
-			ExpectedResult: false,
-			ExpectedError:  ErrorMap["Server Panic"],
-		},
-		{
-			Name:           `empty config.yml and default client`,
-			Server:         BaseServer,
-			YAMLConfigPath: "testdata/tls_config_empty.yml",
-			Client:         DefaultClient,
-			ConnectionURL:  httpPath,
-			ExpectedResult: false,
-			ExpectedError:  ErrorMap["No such file"],
-		},
-		{
-			Name:           `empty config.yml and TLS client`,
-			Server:         BaseServer,
-			YAMLConfigPath: "testdata/tls_config_empty.yml",
-			Client:         TLSClient,
-			ConnectionURL:  httpsPath,
-			ExpectedResult: false,
-			ExpectedError:  ErrorMap["No such file"],
-		},
-		{
-			Name:           `valid tls config yml and tls client`,
-			Server:         BaseServer,
-			YAMLConfigPath: "testdata/tls_config_noAuth.good.yml",
-			Client:         TLSClient,
-			ConnectionURL:  httpsPath,
-			ExpectedResult: true,
-			ExpectedError:  ErrorMap["No such file"],
-		},
-		{
-			Name:           `invalid tls config yml (cert path invalid) and tls client`,
-			Server:         BaseServer,
-			YAMLConfigPath: "testdata/tls_config_noAuth_certPath_invalid.bad.yml",
-			Client:         TLSClient,
-			ConnectionURL:  httpsPath,
-			ExpectedResult: false,
-			ExpectedError:  ErrorMap["No such file"],
-		},
-		{
-			Name:           `invalid tls config yml (key path invalid) and tls client`,
-			Server:         BaseServer,
-			YAMLConfigPath: "testdata/tls_config_noAuth_keyPath_invalid.bad.yml",
-			Client:         TLSClient,
-			ConnectionURL:  httpsPath,
-			ExpectedResult: false,
-			ExpectedError:  ErrorMap["No such file"],
-		},
-		{
-			Name:           `invalid tls config yml (cert path and key path invalid) and tls client`,
-			Server:         BaseServer,
-			YAMLConfigPath: "testdata/tls_config_noAuth_certPath_keyPath_invalid.bad.yml",
-			Client:         TLSClient,
-			ConnectionURL:  httpsPath,
-			ExpectedResult: false,
-			ExpectedError:  ErrorMap["No such file"],
-		},
-		{
-			Name:           `invalid tls config yml (cert path empty) and tls client`,
-			Server:         BaseServer,
-			YAMLConfigPath: "testdata/tls_config_noAuth_certPath_empty.bad.yml",
-			Client:         TLSClient,
-			ConnectionURL:  httpsPath,
-			ExpectedResult: false,
-			ExpectedError:  ErrorMap["No such file"],
-		},
-		{
-			Name:           `invalid tls config yml (key path empty) and tls client`,
-			Server:         BaseServer,
-			YAMLConfigPath: "testdata/tls_config_noAuth_keyPath_empty.bad.yml",
-			Client:         TLSClient,
-			ConnectionURL:  httpsPath,
-			ExpectedResult: false,
-			ExpectedError:  ErrorMap["No such file"],
-		},
-		{
-			Name:           `invalid tls config yml (cert path and key path empty) and tls client`,
-			Server:         BaseServer,
-			YAMLConfigPath: "testdata/tls_config_noAuth_certPath_keyPath_empty.bad.yml",
-			Client:         TLSClient,
-			ConnectionURL:  httpsPath,
-			ExpectedResult: false,
-			ExpectedError:  ErrorMap["No such file"],
-		},
-		{
-			Name:           `invalid tls config yml (cert path and key path empty) and default client`,
-			Server:         BaseServer,
-			YAMLConfigPath: "testdata/tls_config_noAuth_certPath_keyPath_empty.bad.yml",
-			Client:         DefaultClient,
-			ConnectionURL:  httpPath,
-			ExpectedResult: false,
-			ExpectedError:  ErrorMap["No such file"],
-		},
-		{
-			Name:           `invalid tls config yml (invalid structure) and default client`,
-			Server:         BaseServer,
-			YAMLConfigPath: "testdata/tls_config_junk.yml",
-			Client:         DefaultClient,
-			ConnectionURL:  httpPath,
-			ExpectedResult: false,
-			ExpectedError:  ErrorMap["YAML error"],
-		},
-		{
-			Name:           `invalid tls config yml (invalid structure) and default client`,
-			Server:         BaseServer,
-			YAMLConfigPath: "testdata/tls_config_junk.yml",
-			Client:         TLSClient,
-			ConnectionURL:  httpsPath,
-			ExpectedResult: false,
-			ExpectedError:  ErrorMap["YAML error"],
-		},
-		{
-			Name:           `bad config yml path and default client`,
-			Server:         BaseServer,
-			YAMLConfigPath: "somefile",
-			Client:         DefaultClient,
-			ConnectionURL:  httpPath,
-			ExpectedResult: false,
-			ExpectedError:  ErrorMap["No such file"],
-		},
-		{
-			Name:           `bad config yml path and tls client`,
-			Server:         BaseServer,
-			YAMLConfigPath: "somefile",
-			Client:         TLSClient,
-			ConnectionURL:  httpsPath,
-			ExpectedResult: false,
-			ExpectedError:  ErrorMap["No such file"],
-		},
-		{
-			Name:           `bad config yml (invalid ClientAuth) and default client`,
-			Server:         BaseServer,
-			YAMLConfigPath: "testdata/tls_config_noAuth.bad.yml",
-			Client:         DefaultClient,
-			ConnectionURL:  httpPath,
-			ExpectedResult: false,
-			ExpectedError:  ErrorMap["Invalid ClientAuth"],
-		},
-		{
-			Name:           `bad config yml (invalid ClientAuth) and tls client`,
-			Server:         BaseServer,
-			YAMLConfigPath: "testdata/tls_config_noAuth.bad.yml",
-			Client:         TLSClient,
-			ConnectionURL:  httpsPath,
-			ExpectedResult: false,
-			ExpectedError:  ErrorMap["Invalid ClientAuth"],
-		},
-		{
-			Name:           `bad config yml (invalid ClientCAs filepath) and default client`,
-			Server:         BaseServer,
-			YAMLConfigPath: "testdata/tls_config_auth_clientCAs_invalid.bad.yml",
-			Client:         DefaultClient,
-			ConnectionURL:  httpPath,
-			ExpectedResult: false,
-			ExpectedError:  ErrorMap["No such file"],
-		},
-		{
-			Name:           `bad config yml (invalid ClientCAs filepath) and tls client`,
-			Server:         BaseServer,
-			YAMLConfigPath: "testdata/tls_config_auth_clientCAs_invalid.bad.yml",
-			Client:         TLSClient,
-			ConnectionURL:  httpsPath,
-			ExpectedResult: false,
-			ExpectedError:  ErrorMap["No such file"],
-		},
-	}
-
-	numberOfTests, failedTests := len(testTables), 0
-
-	if logging {
-		log.Printf("Running %v tests:", numberOfTests)
-	}
-
-	logsDisabled := func(disable bool) {
-		if logging {
-			return
-		}
-		if disable {
-			log.SetFlags(0)
-			log.SetOutput(ioutil.Discard)
-		} else {
-			log.SetFlags(1)
-			log.SetOutput(os.Stderr)
-		}
-	}
-	for _, test := range testTables {
-		test.httpClient = test.Client()
-		if test.Server != nil {
-			test.httpServer = test.Server()
-		}
-		if logging {
-			log.Printf(" *** Running test: %s", test.Name)
-		}
-
-		logsDisabled(true)
-		actualResult, err := runTest(test)
-		logsDisabled(false)
-
-		switch {
-		case actualResult && test.ExpectedResult:
-		case test.ExpectedResult == false && test.ExpectedError.MatchString(err.Error()):
-		default:
-			t.Fail()
-			failedTests++
-			if logging {
-				log.Printf(" *** Failed test: %s", test.Name)
-				log.Printf(" *** Returned error: %s", err.Error())
-				if test.ExpectedError != nil {
-					log.Printf(" *** Expected error: %s", test.ExpectedError.String())
-				}
-			}
-		}
-	}
-	log.Printf("Passed %v of %v tests", numberOfTests-failedTests, numberOfTests)
-}
-
-func runTest(test *TestInputs) (bool, error) {
-	connectionEstablished := make(chan bool, 1)
-	var errorMessage error
-
-	var once sync.Once
-	recordConnectionResult := func(status bool, err error) {
-		once.Do(func() {
-			errorMessage = err
-			connectionEstablished <- status
-		})
-	}
-
-	defer func() {
-		if recover() != nil {
-			recordConnectionResult(false, errors.New("Panic in test function"))
-		}
-	}()
-
 	go func() {
 		defer func() {
 			if recover() != nil {
-				log.Printf("recovering")
-				recordConnectionResult(false, errors.New("Panic starting server"))
+				recordConnectionError(errors.New("Panic starting server"))
 			}
 		}()
-		err := Listen(test.httpServer, test.YAMLConfigPath)
-		recordConnectionResult(false, err)
+		err := Listen(server, test.YAMLConfigPath)
+		recordConnectionError(err)
 	}()
 
+	var ClientConnection func() (*http.Response, error)
+	if test.UseTLSClient {
+		ClientConnection = func() (*http.Response, error) {
+			cert, err := ioutil.ReadFile("testdata/tls-ca-chain.pem")
+			if err != nil {
+				log.Fatal("Unable to start TLS client. Check cert path")
+			}
+			client := &http.Client{
+				Transport: &http.Transport{
+					TLSClientConfig: &tls.Config{
+						RootCAs: func() *x509.CertPool {
+							caCertPool := x509.NewCertPool()
+							caCertPool.AppendCertsFromPEM(cert)
+							return caCertPool
+						}(),
+					},
+				},
+			}
+			return client.Get("https://localhost" + port)
+		}
+	} else {
+		ClientConnection = func() (*http.Response, error) {
+			client := http.DefaultClient
+			return client.Get("http://localhost" + port)
+		}
+	}
 	go func() {
-		time.Sleep(800 * time.Millisecond)
-		r, err := test.httpClient.Get(test.ConnectionURL)
+		time.Sleep(500 * time.Millisecond)
+		r, err := ClientConnection()
 		if err != nil {
-			recordConnectionResult(false, err)
+			recordConnectionError(err)
 			return
 		}
 		body, err := ioutil.ReadAll(r.Body)
 		if err != nil {
-			recordConnectionResult(false, err)
+			recordConnectionError(err)
 			return
 		}
 		if string(body) != "Hello World!" {
-			recordConnectionResult(false, err)
+			recordConnectionError(errors.New("Server result did not match"))
 			return
 		}
-		recordConnectionResult(true, nil)
+		recordConnectionError(nil)
 	}()
+	err := <-errorChannel
+	if test.isCorrectError(err) == false {
+		t.Errorf(" *** Failed test: %s *** Returned error: %v *** Expected error: %v", test.Name, err, test.ExpectedError)
+	}
+}
 
-	defer func() {
-		if test.httpServer != nil {
-			test.httpServer.Close()
-		}
-	}()
-
-	return <-connectionEstablished, errorMessage
+func (test *TestInputs) isCorrectError(returnedError error) bool {
+	switch {
+	case returnedError == nil && test.ExpectedError == nil:
+	case returnedError != nil && test.ExpectedError != nil && test.ExpectedError.MatchString(returnedError.Error()):
+	default:
+		return false
+	}
+	return true
 }
