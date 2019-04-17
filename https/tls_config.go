@@ -1,41 +1,50 @@
+// Copyright 2019 The Prometheus Authors
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // Package https allows the implementation of tls
 package https
 
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"errors"
 	"io/ioutil"
 	"net/http"
 
-	"github.com/prometheus/common/log"
+	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
 )
 
 type Config struct {
-	TLSCertPath string    `yaml:"tlsCertPath"`
-	TLSKeyPath  string    `yaml:"tlsKeyPath"`
-	TLSConfig   TLSStruct `yaml:"tlsConfig"`
+	TLSConfig TLSConfig `yaml:"tlsConfig"`
 }
 
-type TLSStruct struct {
-	RootCAs            string `yaml:"rootCAs"`
-	ServerName         string `yaml:"serverName"`
-	ClientAuth         string `yaml:"clientAuth"`
-	ClientCAs          string `yaml:"clientCAs"`
-	InsecureSkipVerify bool   `yaml:"insecureSkipVerify"`
+type TLSConfig struct {
+	TLSCertPath string `yaml:"tlsCertPath"`
+	TLSKeyPath  string `yaml:"tlsKeyPath"`
+	ClientAuth  string `yaml:"clientAuth"`
+	ClientCAs   string `yaml:"clientCAs"`
 }
 
-func GetTLSConfig(configPath string) *tls.Config {
+func getTLSConfig(configPath string) (*tls.Config, error) {
 	config, err := loadConfigFromYaml(configPath)
 	if err != nil {
-		log.Fatal("Config failed to load from Yaml", err)
+		return nil, err
 	}
-	tlsc, err := LoadTLSConfig(config)
+	tlsc, err := configToTLSConfig(config)
 	if err != nil {
-		log.Fatal("Failed to convert Config to tls.Config", err)
+		return nil, err
 	}
-	return tlsc
+	return tlsc, nil
 }
 
 func loadConfigFromYaml(fileName string) (*TLSConfig, error) {
@@ -77,7 +86,7 @@ func configToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 		clientCAPool := x509.NewCertPool()
 		clientCAFile, err := ioutil.ReadFile(c.ClientCAs)
 		if err != nil {
-			return cfg, err
+			return nil, err
 		}
 		clientCAPool.AppendCertsFromPEM(clientCAFile)
 		cfg.ClientCAs = clientCAPool
@@ -101,10 +110,20 @@ func configToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 	return cfg, nil
 }
 
-func Listen(server *http.Server) error {
-	if server.TLSConfig != nil {
+// When the listen function is called if the tlsConfigPath is an empty string an HTTP server is started
+// If the tlsConfigPath is a valid config file then an HTTPS server will be started
+// The listen function also sets the GetConfigForClient method of the HTTPS server so that the config and certs are reloaded on new connections
+func Listen(server *http.Server, tlsConfigPath string) error {
+	if len(tlsConfigPath) > 0 {
+		var err error
+		server.TLSConfig, err = getTLSConfig(tlsConfigPath)
+		if err != nil {
+			return err
+		}
+		server.TLSConfig.GetConfigForClient = func(*tls.ClientHelloInfo) (*tls.Config, error) {
+			return getTLSConfig(tlsConfigPath)
+		}
 		return server.ListenAndServeTLS("", "")
-	} else {
-		return server.ListenAndServe()
 	}
+	return server.ListenAndServe()
 }
