@@ -30,13 +30,13 @@ var (
 	port = ":9100"
 
 	ErrorMap = map[string]*regexp.Regexp{
-		"HTTP Response to HTTPS": regexp.MustCompile(`server gave HTTP response to HTTPS client`),
-		"Server Panic":           regexp.MustCompile(`Panic starting server`),
-		"No such file":           regexp.MustCompile(`no such file`),
-		"YAML error":             regexp.MustCompile(`yaml`),
-		"Invalid ClientAuth":     regexp.MustCompile(`ClientAuth`),
-		"TLS handshake":          regexp.MustCompile(`tls`),
-		"Malformed response":     regexp.MustCompile(`malformed HTTP`),
+		"HTTP Response to HTTPS":       regexp.MustCompile(`server gave HTTP response to HTTPS client`),
+		"Server Panic":                 regexp.MustCompile(`Panic starting server`),
+		"No such file":                 regexp.MustCompile(`no such file`),
+		"YAML error":                   regexp.MustCompile(`yaml`),
+		"Invalid ClientAuth":           regexp.MustCompile(`ClientAuth`),
+		"TLS handshake":                regexp.MustCompile(`tls`),
+		"HTTP Request to HTTPS server": regexp.MustCompile(`HTTP request to an HTTPS`),
 	}
 )
 
@@ -134,7 +134,7 @@ func TestServerBehaviour(t *testing.T) {
 		{
 			Name:           `valid tls config yml and default client`,
 			YAMLConfigPath: "testdata/tls_config_noAuth.good.yml",
-			ExpectedError:  ErrorMap["Malformed response"],
+			ExpectedError:  ErrorMap["HTTP Request to HTTPS server"],
 		},
 		{
 			Name:           `valid tls config yml and tls client`,
@@ -225,7 +225,7 @@ func (test *TestInputs) Test(t *testing.T) {
 			return
 		}
 		if string(body) != "Hello World!" {
-			recordConnectionError(errors.New("Server result did not match"))
+			recordConnectionError(errors.New(string(body)))
 			return
 		}
 		recordConnectionError(nil)
