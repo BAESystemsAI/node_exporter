@@ -33,6 +33,7 @@ var (
 		"HTTP Response to HTTPS":       regexp.MustCompile(`server gave HTTP response to HTTPS client`),
 		"Server Panic":                 regexp.MustCompile(`Panic starting server`),
 		"No such file":                 regexp.MustCompile(`no such file`),
+		"Invalid argument":             regexp.MustCompile(`invalid argument`),
 		"YAML error":                   regexp.MustCompile(`yaml`),
 		"Invalid ClientAuth":           regexp.MustCompile(`ClientAuth`),
 		"TLS handshake":                regexp.MustCompile(`tls`),
@@ -54,7 +55,7 @@ func TestYAMLFiles(t *testing.T) {
 		{
 			Name:           `path to config yml invalid`,
 			YAMLConfigPath: "somefile",
-			ExpectedError:  ErrorMap["No such file"],
+			ExpectedError:  ErrorMap["Invalid argument"],
 		},
 		{
 			Name:           `empty config yml`,
@@ -182,7 +183,7 @@ func (test *TestInputs) Test(t *testing.T) {
 				recordConnectionError(errors.New("Panic starting server"))
 			}
 		}()
-		err := Listen(server, test.YAMLConfigPath)
+		err := Listen(server, ConfigPath(test.YAMLConfigPath))
 		recordConnectionError(err)
 	}()
 

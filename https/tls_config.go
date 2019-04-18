@@ -17,8 +17,11 @@ package https
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"io"
 	"io/ioutil"
 	"net/http"
+	"os"
+	"strings"
 
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
@@ -35,8 +38,8 @@ type TLSConfig struct {
 	ClientCAs   string `yaml:"clientCAs"`
 }
 
-func getTLSConfig(configPath string) (*tls.Config, error) {
-	config, err := loadConfigFromYaml(configPath)
+func getTLSConfig(reader io.Reader) (*tls.Config, error) {
+	config, err := loadConfigFromYaml(reader)
 	if err != nil {
 		return nil, err
 	}
@@ -47,8 +50,8 @@ func getTLSConfig(configPath string) (*tls.Config, error) {
 	return tlsc, nil
 }
 
-func loadConfigFromYaml(fileName string) (*TLSConfig, error) {
-	content, err := ioutil.ReadFile(fileName)
+func loadConfigFromYaml(reader io.Reader) (*TLSConfig, error) {
+	content, err := ioutil.ReadAll(reader)
 	if err != nil {
 		return nil, err
 	}
@@ -113,17 +116,70 @@ func configToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 // When the listen function is called if the tlsConfigPath is an empty string an HTTP server is started
 // If the tlsConfigPath is a valid config file then an HTTPS server will be started
 // The listen function also sets the GetConfigForClient method of the HTTPS server so that the config and certs are reloaded on new connections
-func Listen(server *http.Server, tlsConfigPath string) error {
-	if len(tlsConfigPath) > 0 {
-		var err error
-		server.TLSConfig, err = getTLSConfig(tlsConfigPath)
+func Listen(server *http.Server, reader io.Reader) error {
+	if reader != nil {
+		tlsConfig, err := getTLSConfig(reader)
+		server.TLSConfig = tlsConfig
 		if err != nil {
 			return err
 		}
 		server.TLSConfig.GetConfigForClient = func(*tls.ClientHelloInfo) (*tls.Config, error) {
-			return getTLSConfig(tlsConfigPath)
+			return getTLSConfig(reader)
 		}
 		return server.ListenAndServeTLS("", "")
 	}
 	return server.ListenAndServe()
+}
+
+func ConfigString(s string) io.Reader {
+	return &configStringReader{Config: s}
+}
+
+func ConfigPath(s string) io.Reader {
+	if s == "" {
+		return nil
+	}
+	return &configFileReader{Path: s}
+}
+
+type configStringReader struct {
+	Config string
+	reader io.Reader
+}
+
+func (f *configStringReader) Read(b []byte) (n int, err error) {
+	if f.reader == nil {
+		f.reset()
+	}
+	n, err = f.reader.Read(b)
+	if err == io.EOF {
+		f.reset()
+	}
+	return n, err
+}
+
+func (f *configStringReader) reset() {
+	f.reader = strings.NewReader(f.Config)
+}
+
+type configFileReader struct {
+	Path   string
+	reader io.Reader
+}
+
+func (f *configFileReader) Read(b []byte) (n int, err error) {
+	if f.reader == nil {
+		f.reset()
+	}
+	n, err = f.reader.Read(b)
+	if err == io.EOF {
+		f.reset()
+	}
+	return n, err
+}
+
+func (f *configFileReader) reset() error {
+	reader, err := os.Open(f.Path)
+	f.reader = reader
+	return err
 }
