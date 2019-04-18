@@ -149,6 +149,67 @@ func TestServerBehaviour(t *testing.T) {
 	}
 }
 
+func TestConfigReloading(t *testing.T) {
+
+	goodYAMLPath := "testdata/tls_config_noAuth.good.yml"
+	badYAMLPath := "testdata/tls_config_noAuth.good.blocking.yml"
+
+	server := &http.Server{
+		Addr: port,
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("Hello World!"))
+		}),
+	}
+	defer server.Close()
+
+	configReader := &configFileReader{Path: badYAMLPath}
+
+	go func() {
+		defer func() {
+			if recover() != nil {
+				t.Error("Panic starting server")
+			}
+		}()
+		err := Listen(server, configReader)
+		t.Errorf("%v", err)
+	}()
+
+	client := getTLSClient()
+
+	TestClientConnection := func() error {
+		r, err := client.Get("https://localhost" + port)
+		if err != nil {
+			return (err)
+		}
+		body, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			return (err)
+		}
+		if string(body) != "Hello World!" {
+			return (errors.New(string(body)))
+		}
+		return (nil)
+	}
+
+	time.Sleep(500 * time.Millisecond)
+	configReader.Path = badYAMLPath
+	configReader.reset()
+
+	err := TestClientConnection()
+	if err == nil {
+		t.Error("Connection accepted but should have failed.")
+		return
+	}
+	configReader.Path = goodYAMLPath
+	configReader.reset()
+
+	err = TestClientConnection()
+	if err != nil {
+		t.Error("Connection failed but should have been accepted.")
+		return
+	}
+}
+
 func (test *TestInputs) Test(t *testing.T) {
 	errorChannel := make(chan error, 1)
 	var once sync.Once
@@ -190,21 +251,7 @@ func (test *TestInputs) Test(t *testing.T) {
 	var ClientConnection func() (*http.Response, error)
 	if test.UseTLSClient {
 		ClientConnection = func() (*http.Response, error) {
-			cert, err := ioutil.ReadFile("testdata/tls-ca-chain.pem")
-			if err != nil {
-				log.Fatal("Unable to start TLS client. Check cert path")
-			}
-			client := &http.Client{
-				Transport: &http.Transport{
-					TLSClientConfig: &tls.Config{
-						RootCAs: func() *x509.CertPool {
-							caCertPool := x509.NewCertPool()
-							caCertPool.AppendCertsFromPEM(cert)
-							return caCertPool
-						}(),
-					},
-				},
-			}
+			client := getTLSClient()
 			return client.Get("https://localhost" + port)
 		}
 	} else {
@@ -235,6 +282,25 @@ func (test *TestInputs) Test(t *testing.T) {
 	if test.isCorrectError(err) == false {
 		t.Errorf(" *** Failed test: %s *** Returned error: %v *** Expected error: %v", test.Name, err, test.ExpectedError)
 	}
+}
+
+func getTLSClient() *http.Client {
+	cert, err := ioutil.ReadFile("testdata/tls-ca-chain.pem")
+	if err != nil {
+		log.Fatal("Unable to start TLS client. Check cert path")
+	}
+	client := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				RootCAs: func() *x509.CertPool {
+					caCertPool := x509.NewCertPool()
+					caCertPool.AppendCertsFromPEM(cert)
+					return caCertPool
+				}(),
+			},
+		},
+	}
+	return client
 }
 
 func (test *TestInputs) isCorrectError(returnedError error) bool {
