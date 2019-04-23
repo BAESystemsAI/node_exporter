@@ -166,12 +166,14 @@ func TestConfigReloading(t *testing.T) {
 
 	go func() {
 		defer func() {
-			if recover() != nil {
-				t.Error("Panic starting server")
+			if r := recover(); r != nil {
+				t.Error("Panic in server")
 			}
 		}()
 		err := Listen(server, configReader)
-		t.Errorf("%v", err)
+		if err != nil && err.Error() != "http: Server closed" {
+			t.Errorf("%v", err)
+		}
 	}()
 
 	client := getTLSClient()
