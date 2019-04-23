@@ -15,6 +15,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	_ "net/http/pprof"
 	"sort"
@@ -175,16 +176,17 @@ func main() {
 	log.Infoln("Listening on", *listenAddress)
 
 	server := &http.Server{Addr: *listenAddress, Handler: nil}
+	var config io.Reader
 	if len(*TLS) > 0 {
 
 		//Config called from config file
 		log.Infoln("TLS enabled. Loading config from: ", *TLS)
 
 		//tls config added to server
-		server.TLSConfig = https.GetTLSConfig(*TLS)
+		config = https.ConfigPath(*TLS)
 
 	}
-	if err := https.Listen(server); err != nil {
+	if err := https.Listen(server, config); err != nil {
 		log.Fatal(err)
 	}
 }
