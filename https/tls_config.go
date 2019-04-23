@@ -21,7 +21,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
-	"strings"
+	"sync"
 
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
@@ -131,10 +131,6 @@ func Listen(server *http.Server, reader io.Reader) error {
 	return server.ListenAndServe()
 }
 
-func ConfigString(s string) io.Reader {
-	return &configStringReader{Config: s}
-}
-
 func ConfigPath(s string) io.Reader {
 	if s == "" {
 		return nil
@@ -142,44 +138,36 @@ func ConfigPath(s string) io.Reader {
 	return &configFileReader{Path: s}
 }
 
-type configStringReader struct {
-	Config string
-	reader io.Reader
-}
-
-func (f *configStringReader) Read(b []byte) (n int, err error) {
-	if f.reader == nil {
-		f.reset()
-	}
-	n, err = f.reader.Read(b)
-	if err == io.EOF {
-		f.reset()
-	}
-	return n, err
-}
-
-func (f *configStringReader) reset() {
-	f.reader = strings.NewReader(f.Config)
-}
-
 type configFileReader struct {
 	Path   string
+	mutex  sync.Mutex
 	reader io.Reader
 }
 
-func (f *configFileReader) Read(b []byte) (n int, err error) {
-	if f.reader == nil {
-		f.reset()
+func (r *configFileReader) NewPath(path string) error {
+	r.mutex.Lock()
+	r.Path = path
+	reader, err := os.Open(r.Path)
+	r.reader = reader
+	r.mutex.Unlock()
+	return err
+}
+
+func (r *configFileReader) Read(b []byte) (n int, err error) {
+	r.mutex.Lock()
+	if r.reader == nil {
+		r.reset()
 	}
-	n, err = f.reader.Read(b)
+	n, err = r.reader.Read(b)
 	if err == io.EOF {
-		f.reset()
+		r.reset()
 	}
+	r.mutex.Unlock()
 	return n, err
 }
 
-func (f *configFileReader) reset() error {
-	reader, err := os.Open(f.Path)
-	f.reader = reader
+func (r *configFileReader) reset() error {
+	reader, err := os.Open(r.Path)
+	r.reader = reader
 	return err
 }

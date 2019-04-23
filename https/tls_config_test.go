@@ -151,6 +151,14 @@ func TestServerBehaviour(t *testing.T) {
 
 func TestConfigReloading(t *testing.T) {
 
+	errorChannel := make(chan error, 1)
+	var once sync.Once
+	recordConnectionError := func(err error) {
+		once.Do(func() {
+			errorChannel <- err
+		})
+	}
+
 	goodYAMLPath := "testdata/tls_config_noAuth.good.yml"
 	badYAMLPath := "testdata/tls_config_noAuth.good.blocking.yml"
 
@@ -167,18 +175,20 @@ func TestConfigReloading(t *testing.T) {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				t.Error("Panic in server")
+				recordConnectionError(errors.New("Panic in server"))
 			}
 		}()
 		err := Listen(server, configReader)
 		if err != nil && err.Error() != "http: Server closed" {
-			t.Errorf("%v", err)
+			recordConnectionError(err)
 		}
 	}()
 
 	client := getTLSClient()
 
 	TestClientConnection := func() error {
+
+		time.Sleep(250 * time.Millisecond)
 		r, err := client.Get("https://localhost" + port)
 		if err != nil {
 			return (err)
@@ -192,23 +202,21 @@ func TestConfigReloading(t *testing.T) {
 		}
 		return (nil)
 	}
-
-	time.Sleep(500 * time.Millisecond)
-	configReader.Path = badYAMLPath
-	configReader.reset()
-
 	err := TestClientConnection()
 	if err == nil {
-		t.Error("Connection accepted but should have failed.")
+		recordConnectionError(errors.New("Connection accepted but should have failed."))
 		return
 	}
-	configReader.Path = goodYAMLPath
-	configReader.reset()
-
+	configReader.NewPath(goodYAMLPath)
 	err = TestClientConnection()
 	if err != nil {
-		t.Error("Connection failed but should have been accepted.")
-		return
+		recordConnectionError(errors.New("Connection failed but should have been accepted."))
+	}
+	recordConnectionError(nil)
+
+	err = <-errorChannel
+	if err != nil {
+		t.Errorf(" *** Failed test: %s *** Returned error: %v", "TestConfigReloading", err)
 	}
 }
 
@@ -263,7 +271,7 @@ func (test *TestInputs) Test(t *testing.T) {
 		}
 	}
 	go func() {
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(250 * time.Millisecond)
 		r, err := ClientConnection()
 		if err != nil {
 			recordConnectionError(err)
