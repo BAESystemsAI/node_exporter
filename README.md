@@ -50,6 +50,7 @@ netdev | Exposes network interface statistics such as bytes transferred. | Darwi
 netstat | Exposes network statistics from `/proc/net/netstat`. This is the same information as `netstat -s`. | Linux
 nfs | Exposes NFS client statistics from `/proc/net/rpc/nfs`. This is the same information as `nfsstat -c`. | Linux
 nfsd | Exposes NFS kernel server statistics from `/proc/net/rpc/nfsd`. This is the same information as `nfsstat -s`. | Linux
+pressure | Exposes pressure stall statistics from `/proc/pressure/`. | Linux (kernel 4.20+ and/or [CONFIG\_PSI](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/Documentation/accounting/psi.txt))
 sockstat | Exposes various statistics from `/proc/net/sockstat`. | Linux
 stat | Exposes various statistics from `/proc/stat`. This includes boot time, forks and interrupts. | Linux
 textfile | Exposes statistics read from local disk. The `--collector.textfile.directory` flag must be set. | _any_
@@ -61,6 +62,23 @@ xfs | Exposes XFS runtime statistics. | Linux (kernel 4.4+)
 zfs | Exposes [ZFS](http://open-zfs.org/) performance statistics. | [Linux](http://zfsonlinux.org/), Solaris
 
 ### Disabled by default
+
+The perf collector may not work by default on all Linux systems due to kernel
+configuration and security settings. To allow access, set the following sysctl
+parameter:
+
+```
+sysctl -w kernel.perf_event_paranoid=X
+```
+
+- 2 allow only user-space measurements (default since Linux 4.6).
+- 1 allow both kernel and user measurements (default before Linux 4.6).
+- 0 allow access to CPU-specific data but not raw tracepoint samples.
+- -1 no restrictions.
+
+Depending on the configured value different metrics will be available, for most
+cases `0` will provide the most complete set. For more information see [`man 2
+perf_event_open`](http://man7.org/linux/man-pages/man2/perf_event_open.2.html).
 
 Name     | Description | OS
 ---------|-------------|----
@@ -80,6 +98,7 @@ supervisord | Exposes service status from [supervisord](http://supervisord.org/)
 systemd | Exposes service and system status from [systemd](http://www.freedesktop.org/wiki/Software/systemd/). | Linux
 tcpstat | Exposes TCP connection status information from `/proc/net/tcp` and `/proc/net/tcp6`. (Warning: the current version has potential performance issues in high load situations.) | Linux
 wifi | Exposes WiFi device and station statistics. | Linux
+perf | Exposes perf based metrics (Warning: Metrics are dependent on kernel configuration and settings). | Linux
 
 ### Textfile Collector
 
