@@ -30,7 +30,7 @@ import (
 
 const (
 	defIgnoredMountPoints = "^/(dev|proc|sys|var/lib/docker/.+)($|/)"
-	defIgnoredFSTypes     = "^(autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tracefs)$"
+	defIgnoredFSTypes     = "^(autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|fusectl|hugetlbfs|iso9660|mqueue|nsfs|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tracefs)$"
 	mountTimeout          = 30 * time.Second
 )
 
@@ -165,7 +165,7 @@ func parseFilesystemLabels(r io.Reader) ([]filesystemLabels, error) {
 
 		filesystems = append(filesystems, filesystemLabels{
 			device:     parts[0],
-			mountPoint: parts[1],
+			mountPoint: rootfsStripPrefix(parts[1]),
 			fsType:     parts[2],
 			options:    parts[3],
 		})

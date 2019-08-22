@@ -3,13 +3,26 @@
 ### **Breaking changes**
 
 * The netdev collector CLI argument `--collector.netdev.ignored-devices` was renamed to `--collector.netdev.device-blacklist` in order to conform with the systemd collector. #1279
-
+* The label named `state` on `node_systemd_service_restart_total` metrics was changed to `name` to better describe the metric. #1393
+* Refactoring of the mdadm collector changes several metrics
+    - `node_md_disks_active` is removed
+    - `node_md_disks` now has a `state` label for "fail", "spare", "active" disks.
+    - `node_md_is_active` is replaced by `node_md_state` with a state set of "active", "inactive", "recovering", "resync".
+* Additional label `mountaddr` added to NFS device metrics to distinguish mounts from the same URL, but different IP addresses. #1417
 
 ### Changes
 
 * [CHANGE] Add `--collector.netdev.device-whitelist`. #1279
-* [FEATURE]
-* [ENHANCEMENT]
+* [CHANGE] Refactor mdadm collector #1403
+* [CHANGE] Add `mountaddr` label to NFS metrics. #1417
+* [FEATURE] Add new schedstat collector #1389
+* [FEATURE] Add uname support for Darwin and OpenBSD #1433
+* [ENHANCEMENT] Include additional XFS runtime statistics. #1423
+* [ENHANCEMENT] Report non-fatal collection errors in the exporter metric. #1439
+* [BUGFIX] Renamed label `state` to `name` on `node_systemd_service_restart_total`. #1393
+* [BUGFIX] Fix netdev nil reference on Darwin #1414
+* [BUGFIX] Strip path.rootfs from mountpoint labels #1421
+* [FEATURE] Add new thermal_zone collector #1425
 
 ## 0.18.1 / 2019-06-04
 
